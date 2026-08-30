@@ -47,6 +47,7 @@ type ImageTaskStatus = {
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const OWNER_EMAIL = 'deallon2@gmail.com';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -81,6 +82,13 @@ function App() {
       return;
     }
     return onAuthStateChanged(auth, (nextUser) => {
+      if (nextUser && nextUser.email?.trim().toLowerCase() !== OWNER_EMAIL) {
+        setUser(null);
+        setLoginError("Ce compte Google n’est pas autorisé à ouvrir Deaflix Writer.");
+        setAuthReady(true);
+        void signOutFromGoogle();
+        return;
+      }
       setUser(nextUser);
       setAuthReady(true);
     });
@@ -643,9 +651,9 @@ function LoginView({ configured, loading, error, onSignIn }: { configured: boole
           <div><strong>DEAFLIX</strong><span>WRITER</span></div>
         </div>
         <div className="login-copy">
-          <span className="eyebrow"><ShieldCheck size={14} /> Studio privé</span>
+          <span className="eyebrow"><ShieldCheck size={14} /> Accès privé</span>
           <h1>Votre histoire vous attend.</h1>
-          <p>Connectez-vous avec Google pour ouvrir votre espace d’écriture. Chaque compte possède sa propre sauvegarde locale sur cet appareil.</p>
+          <p>Connectez-vous avec le compte Google autorisé pour ouvrir votre studio d’écriture privé. Les autres comptes sont automatiquement refusés.</p>
         </div>
         <button className="google-button" onClick={onSignIn} disabled={loading || !configured}>
           <span className="google-mark">G</span>

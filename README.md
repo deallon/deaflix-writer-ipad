@@ -5,7 +5,7 @@ Une application d’écriture et de préparation visuelle pensée pour iPad.
 ## Ce que l’application permet
 
 - organiser une histoire en chapitres, scènes et plans ;
-- ouvrir son espace avec une connexion Google sécurisée par Firebase ;
+- ouvrir son espace privé avec le seul compte Google autorisé, grâce à Firebase ;
 - écrire chaque scène dans un espace calme et lisible ;
 - discuter avec GPT‑5.6 via Evolink en lui donnant le contexte du projet ;
 - générer les images des plans avec GPT Image 2 via Evolink ;
@@ -15,7 +15,7 @@ Une application d’écriture et de préparation visuelle pensée pour iPad.
 
 ## Confidentialité
 
-Le dépôt ne contient aucune clé Evolink et aucune histoire personnelle. La connexion Google protège l’accès à l’interface et sépare les sauvegardes locales par compte. La clé saisie dans les réglages, les textes et les images restent conservés uniquement dans le navigateur de l’appareil : ils ne sont pas synchronisés dans Firebase. Pour une deuxième copie de sécurité, utilisez régulièrement **Exporter**.
+Le dépôt ne contient aucune clé Evolink et aucune histoire personnelle. La connexion Google protège l’accès à l’interface et refuse tout compte autre que celui du propriétaire. La clé saisie dans les réglages, les textes et les images restent conservés uniquement dans le navigateur de l’appareil : ils ne sont pas synchronisés dans Firebase. Pour une deuxième copie de sécurité, utilisez régulièrement **Exporter**.
 
 ## Développement
 
