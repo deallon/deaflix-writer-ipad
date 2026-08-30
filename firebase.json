@@ -1,0 +1,10 @@
+{
+  "auth": {
+    "providers": {
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "Deaflix Writer",
+        "supportEmail": "deallon2@gmail.com"
+      }
+    }
+  }
+}

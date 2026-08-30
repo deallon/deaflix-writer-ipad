@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import type { User } from 'firebase/auth';
+import { onAuthStateChanged } from 'firebase/auth';
 import {
   Archive,
   BookOpen,
@@ -12,6 +14,7 @@ import {
   Image as ImageIcon,
   KeyRound,
   LayoutGrid,
+  LogOut,
   Menu,
   MoreHorizontal,
   Plus,
@@ -19,12 +22,14 @@ import {
   Send,
   Settings as SettingsIcon,
   Sparkles,
+  ShieldCheck,
   Trash2,
   Upload,
   WandSparkles,
   X,
 } from 'lucide-react';
 import { readLocal, writeLocal } from './db';
+import { auth, firebaseIsConfigured, signInWithGoogle, signOutFromGoogle } from './firebase';
 import { defaultSettings, starterProject, uid } from './seed';
 import type { Chapter, ChatMessage, Project, Scene, Settings, Shot } from './types';
 import './styles.css';
@@ -44,6 +49,10 @@ type ImageTaskStatus = {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState('');
   const [project, setProject] = useState<Project>(starterProject);
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -67,16 +76,38 @@ function App() {
   const importRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (!auth) {
+      setAuthReady(true);
+      return;
+    }
+    return onAuthStateChanged(auth, (nextUser) => {
+      setUser(nextUser);
+      setAuthReady(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setReady(false);
+      return;
+    }
+    const prefix = `user:${user.uid}:`;
     Promise.all([
+      readLocal<Project>(`${prefix}project`),
+      readLocal<Settings>(`${prefix}settings`),
+      readLocal<ChatMessage[]>(`${prefix}messages`),
       readLocal<Project>('project'),
       readLocal<Settings>('settings'),
       readLocal<ChatMessage[]>('messages'),
+      readLocal<string>('legacy-owner'),
     ])
-      .then(([savedProject, savedSettings, savedMessages]) => {
-        const nextProject = savedProject ?? starterProject;
+      .then(([savedProject, savedSettings, savedMessages, legacyProject, legacySettings, legacyMessages, legacyOwner]) => {
+        const canUseLegacy = !legacyOwner || legacyOwner === user.uid;
+        const nextProject = savedProject ?? (canUseLegacy ? legacyProject : null) ?? starterProject;
         setProject(nextProject);
-        setSettings(savedSettings ?? defaultSettings);
-        setMessages(savedMessages ?? []);
+        setSettings(savedSettings ?? (canUseLegacy ? legacySettings : null) ?? defaultSettings);
+        setMessages(savedMessages ?? (canUseLegacy ? legacyMessages : null) ?? []);
+        if (!legacyOwner) void writeLocal('legacy-owner', user.uid);
         const chapter = nextProject.chapters[0];
         const scene = chapter?.scenes[0];
         setSelectedChapterId(chapter?.id ?? '');
@@ -86,22 +117,23 @@ function App() {
       })
       .catch(() => setSaveState('offline'))
       .finally(() => setReady(true));
-  }, []);
+  }, [user]);
 
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || !user) return;
+    const prefix = `user:${user.uid}:`;
     setSaveState('saving');
     const timer = window.setTimeout(() => {
       Promise.all([
-        writeLocal('project', { ...project, updatedAt: new Date().toISOString() }),
-        writeLocal('settings', settings),
-        writeLocal('messages', messages),
+        writeLocal(`${prefix}project`, { ...project, updatedAt: new Date().toISOString() }),
+        writeLocal(`${prefix}settings`, settings),
+        writeLocal(`${prefix}messages`, messages),
       ])
         .then(() => setSaveState('saved'))
         .catch(() => setSaveState('offline'));
     }, 450);
     return () => window.clearTimeout(timer);
-  }, [project, settings, messages, ready]);
+  }, [project, settings, messages, ready, user]);
 
   useEffect(() => {
     if (!toast) return;
@@ -407,6 +439,49 @@ function App() {
     setToast('Proposition ajoutée comme nouvelle scène');
   };
 
+  const handleGoogleSignIn = async () => {
+    if (loginLoading) return;
+    setLoginLoading(true);
+    setLoginError('');
+    try {
+      await signInWithGoogle();
+    } catch (error) {
+      const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : '';
+      if (code.includes('popup-closed')) setLoginError('La fenêtre Google a été fermée avant la fin. Réessayez.');
+      else if (code.includes('popup-blocked')) setLoginError('Safari a bloqué la fenêtre Google. Autorisez les fenêtres surgissantes puis réessayez.');
+      else if (code.includes('unauthorized-domain')) setLoginError("Ce domaine doit encore être autorisé dans Firebase.");
+      else setLoginError(error instanceof Error ? error.message : 'Connexion Google impossible.');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleGoogleSignOut = async () => {
+    await signOutFromGoogle();
+    setSettingsOpen(false);
+    setNavOpen(false);
+  };
+
+  if (!authReady) {
+    return (
+      <div className="splash">
+        <span className="splash-logo" style={{ backgroundImage: 'url("./icons/icon-192.png")' }} aria-hidden="true" />
+        <span>Vérification de votre compte…</span>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <LoginView
+        configured={firebaseIsConfigured}
+        loading={loginLoading}
+        error={loginError}
+        onSignIn={handleGoogleSignIn}
+      />
+    );
+  }
+
   if (!ready) {
     return (
       <div className="splash">
@@ -439,6 +514,15 @@ function App() {
           <button className="secondary-button hide-small" onClick={() => importRef.current?.click()}><Upload size={16} /> Restaurer</button>
           <button className="secondary-button" onClick={exportProject}><Download size={16} /> <span className="hide-small">Exporter</span></button>
           <button className="icon-button" onClick={() => setSettingsOpen(true)} aria-label="Réglages"><SettingsIcon size={20} /></button>
+          <details className="account-menu">
+            <summary aria-label="Ouvrir le menu du compte">
+              <span className="account-avatar" style={user.photoURL ? { backgroundImage: `url("${user.photoURL.replace(/"/g, '%22')}")` } : undefined}>{user.photoURL ? '' : (user.displayName?.[0] ?? user.email?.[0] ?? 'G').toUpperCase()}</span>
+            </summary>
+            <div className="account-popover">
+              <div><strong>{user.displayName ?? 'Compte Google'}</strong><span>{user.email}</span></div>
+              <button onClick={handleGoogleSignOut}><LogOut size={15} /> Se déconnecter</button>
+            </div>
+          </details>
         </div>
       </header>
 
@@ -545,6 +629,34 @@ function App() {
       )}
       {toast && <div className="toast"><Check size={17} />{toast}</div>}
     </div>
+  );
+}
+
+function LoginView({ configured, loading, error, onSignIn }: { configured: boolean; loading: boolean; error: string; onSignIn: () => void }) {
+  return (
+    <main className="login-screen">
+      <div className="login-glow login-glow-one" />
+      <div className="login-glow login-glow-two" />
+      <section className="login-card">
+        <div className="login-brand">
+          <span className="login-logo" style={{ backgroundImage: 'url("./icons/icon-192.png")' }} aria-hidden="true" />
+          <div><strong>DEAFLIX</strong><span>WRITER</span></div>
+        </div>
+        <div className="login-copy">
+          <span className="eyebrow"><ShieldCheck size={14} /> Studio privé</span>
+          <h1>Votre histoire vous attend.</h1>
+          <p>Connectez-vous avec Google pour ouvrir votre espace d’écriture. Chaque compte possède sa propre sauvegarde locale sur cet appareil.</p>
+        </div>
+        <button className="google-button" onClick={onSignIn} disabled={loading || !configured}>
+          <span className="google-mark">G</span>
+          {loading ? 'Ouverture de Google…' : 'Continuer avec Google'}
+        </button>
+        {!configured && <div className="login-notice">La connexion Firebase est en cours de configuration. Revenez dans quelques instants.</div>}
+        {error && <div className="login-error">{error}</div>}
+        <div className="login-privacy"><KeyRound size={14} /><span><strong>Vos créations restent privées.</strong> Les textes, images et la clé Evolink restent enregistrés localement sur votre iPad.</span></div>
+      </section>
+      <p className="login-footer">DEAFLIX WRITER · Votre studio d’histoires sur iPad</p>
+    </main>
   );
 }
 
