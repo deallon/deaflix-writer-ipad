@@ -1,0 +1,6 @@
+[
+  {"id":"celestin-video","type":"pipeline","character":"celestin","expression":"unclassified","video":"/replace/with/video.mp4","options":{"fps":1,"seconds":30,"scale":2,"minSize":64}},
+  {"id":"decor-request","type":"prepare","adapter":"blender","payload":{"scene":"episode-01","brief":"Décor à préciser"}},
+  {"id":"comfy-request","type":"prepare","adapter":"comfyui","payload":{"workflow":"À fournir : export API ComfyUI"}},
+  {"id":"runpod-request","type":"prepare","adapter":"runpod","payload":{"inputSchema":"À fournir : contrat de votre endpoint"}}
+]
