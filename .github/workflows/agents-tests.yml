@@ -1,0 +1,22 @@
+name: Deaflix agents tests
+on:
+  pull_request:
+    paths: ['agents/**', '.github/workflows/agents-tests.yml']
+  push:
+    branches: ['codex/deaflix-agents-mvp']
+    paths: ['agents/**', '.github/workflows/agents-tests.yml']
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agents
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: agents/package-lock.json
+      - run: npm ci
+      - run: npm test
